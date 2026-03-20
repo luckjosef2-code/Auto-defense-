@@ -1,3 +1,43 @@
+local player = game.Players.LocalPlayer.Name
+
+-- ✅ WHITELIST (hier reinschreiben)
+local whitelist = {
+    "waffel_dob6",
+    "",
+    ""
+}
+
+-- ❌ BLACKLIST (hier reinschreiben)
+local blacklist = {
+    "",
+    ""
+}
+
+-- ❌ BLACKLIST CHECK (IMMER ZUERST)
+for _, name in pairs(blacklist) do
+    if player == name then
+        return game.Players.LocalPlayer:Kick("❌ Du bist gebannt")
+    end
+end
+
+-- ❌ NICHT WHITELISTED
+local allowed = false
+for _, name in pairs(whitelist) do
+    if player == name then
+        allowed = true
+        break
+    end
+end
+
+if not allowed then
+    return game.Players.LocalPlayer:Kick("❌ Kein Zugriff")
+end
+
+-- ✅ Zugriff erlaubt
+print("✅ Willkommen "..player)
+
+-- 👇 dein Script hier
+
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
