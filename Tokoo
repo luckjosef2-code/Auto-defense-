@@ -2,15 +2,15 @@ local player = game.Players.LocalPlayer
 
 -- ✅ WHITELIST (nur diese dürfen rein)
 local whitelist = {
-    "User1",
-    "User2",
-    "User3"
+    "",
+    "",
+    ""
 }
 
 -- ❌ BLACKLIST (diese werden IMMER gekickt)
 local blacklist = {
-    "BadUser1",
-    "BadUser2"
+    "",
+    ""
 }
 
 -- ❌ BLACKLIST CHECK (zuerst!)
