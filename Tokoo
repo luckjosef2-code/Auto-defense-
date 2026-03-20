@@ -8,7 +8,7 @@ print("Dein Roblox Username:", playerName)
 
 -- ✅ WHITELIST (ROBLOX USERNAMES)
 local whitelist = {
-    "waffel_dob6", 
+    "", 
     "Friend1"
 }
 
