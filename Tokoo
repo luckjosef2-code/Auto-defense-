@@ -1,31 +1,35 @@
+-- warten bis Player geladen ist
+repeat wait() until game.Players.LocalPlayer
+
 local player = game.Players.LocalPlayer
+local playerName = player.Name
 
--- ✅ WHITELIST (nur diese dürfen rein)
+print("Dein Roblox Username:", playerName)
+
+-- ✅ WHITELIST (ROBLOX USERNAMES)
 local whitelist = {
-    "waffel_dob6",
-    "",
-    ""
+    "waffel_dob6", 
+    "Friend1"
 }
 
--- ❌ BLACKLIST (diese werden IMMER gekickt)
+-- ❌ BLACKLIST
 local blacklist = {
-    "",
-    ""
+    "BadUser1"
 }
 
--- ❌ BLACKLIST CHECK (zuerst!)
-for _, name in pairs(blacklist) do
-    if player.Name == name then
+-- ❌ BLACKLIST CHECK
+for _, name in ipairs(blacklist) do
+    if playerName:lower() == name:lower() then
         player:Kick("❌ Du bist gebannt")
         return
     end
 end
 
--- ❌ WHITELIST CHECK
+-- ✅ WHITELIST CHECK
 local allowed = false
 
-for _, name in pairs(whitelist) do
-    if player.Name == name then
+for _, name in ipairs(whitelist) do
+    if playerName:lower() == name:lower() then
         allowed = true
         break
     end
@@ -37,9 +41,10 @@ if not allowed then
 end
 
 -- ✅ Zugriff erlaubt
-print("✅ Willkommen "..player.Name)
+print("✅ Willkommen "..playerName)
 
--- 👇 DEIN SCRIPT HIER
+-- 👇 dein Script hier
+
 
 
 local Players = game:GetService("Players")
