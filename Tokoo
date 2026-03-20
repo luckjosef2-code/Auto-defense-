@@ -2,7 +2,7 @@ local player = game.Players.LocalPlayer.Name
 
 -- ✅ WHITELIST (hier reinschreiben)
 local whitelist = {
-    "waffel_dob6",
+    "",
     "",
     ""
 }
