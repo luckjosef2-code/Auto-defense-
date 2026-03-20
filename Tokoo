@@ -1,0 +1,560 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Stats = game:GetService("Stats")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local plr = Players.LocalPlayer
+local gui = plr:WaitForChild("PlayerGui")
+
+-- Core Data
+local core = {
+	Mode = "None",
+	BorderKick = false,
+	AntiIntruder = false,
+	MyPlot = nil,
+	StealHitbox = nil,
+	CarpetSpammedPlayers = {},
+	AdminRemote = nil,
+	LastPunishTime = {},
+	TpProtector = false,
+	PlayerPositions = {},
+	TpProtectorCooldowns = {},
+}
+
+local CARPET_ITEMS = {
+	["Flying Carpet"] = true,
+	["Witch's Broom"] = true,
+	["Santa's Sleigh"] = true
+}
+
+local function fireAdmin(...)
+	if not core.AdminRemote then return end
+	local args = {...}
+	task.spawn(function()
+		core.AdminRemote:InvokeServer(unpack(args))
+	end)
+end
+
+local function punishPlayer(p)
+	if not core.AdminRemote then return end
+	if not p or p == plr then return end
+	local char = p.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local uid = p.UserId
+	if core.LastPunishTime[uid] and tick() - core.LastPunishTime[uid] < 2 then return end
+	core.LastPunishTime[uid] = tick()
+	hrp.CFrame = CFrame.new(0, 10000, 0)
+
+	if core.Mode == "Kick" then
+		fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "balloon")
+		task.delay(0.3, function() plr:Kick("Base Defender Protection") end)
+	elseif core.Mode == "NoKick" then
+		fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "balloon")
+		fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "ragdoll")
+	end
+end
+
+local function findPlayerInHitbox()
+	local hitbox = core.StealHitbox
+	if not hitbox then return end
+	local cf = hitbox.CFrame
+	local size = hitbox.Size
+	local hx, hz = size.X * 0.5, size.Z * 0.5
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= plr then
+			local char = p.Character
+			if char then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local rel = cf:PointToObjectSpace(hrp.Position)
+					if math.abs(rel.X) <= hx and math.abs(rel.Z) <= hz then
+						for _, item in ipairs(char:GetChildren()) do
+							if CARPET_ITEMS[item.Name] then
+								punishPlayer(p)
+								break
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Initialize Admin Remote
+task.spawn(function()
+	if not plr.Character then plr.CharacterAdded:Wait() end
+	task.wait(1)
+
+	local net = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
+	local children = net:GetChildren()
+	local byIdx = {}
+	local byName = {}
+	for i, obj in ipairs(children) do
+		byIdx[i] = obj
+		byName[obj.Name] = i
+	end
+
+	local anchorIdx = byName["RF/a0e78691-cb9b-4efc-ac08-9c06fea70059"]
+	if anchorIdx then
+		local actual = byIdx[anchorIdx + 1]
+		if actual then
+			core.AdminRemote = actual
+		end
+	end
+
+	for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+		if obj:IsA("RemoteEvent") then
+			obj.OnClientEvent:Connect(function(...)
+				if core.Mode == "None" or not core.AdminRemote or not core.MyPlot then return end
+				for _, a in ipairs({...}) do
+					if type(a) == "string" and a:lower():find("stealing") then
+						local myHRP = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+						if not myHRP then return end
+						local best, bestDist = nil, math.huge
+						for _, p in ipairs(Players:GetPlayers()) do
+							if p ~= plr then
+								local char = p.Character
+								if char then
+									local hrp = char:FindFirstChild("HumanoidRootPart")
+									if hrp then
+										local dist = (hrp.Position - myHRP.Position).Magnitude
+										if dist < bestDist then
+											bestDist = dist
+											best = p
+										end
+									end
+								end
+							end
+						end
+						if best then punishPlayer(best) end
+						return
+					end
+				end
+			end)
+		end
+	end
+end)
+
+-- Hooks
+task.spawn(function()
+	if hookfunction and fireproximityprompt then
+		local old = fireproximityprompt
+		hookfunction(fireproximityprompt, newcclosure(function(prompt, ...)
+			if core.Mode ~= "None" then
+				local at = (prompt.ActionText or ""):lower()
+				local ot = (prompt.ObjectText or ""):lower()
+				if at:find("steal") or ot:find("steal") then
+					local part = prompt.Parent
+					if part and part:IsA("BasePart") then
+						local pos = part.Position
+						local best, bestD = nil, math.huge
+						for _, p in ipairs(Players:GetPlayers()) do
+							if p ~= plr then
+								local char = p.Character
+								if char then
+									local hrp = char:FindFirstChild("HumanoidRootPart")
+									if hrp then
+										local d = (hrp.Position - pos).Magnitude
+										if d < bestD then
+											bestD = d
+											best = p
+										end
+									end
+								end
+							end
+						end
+						if best and bestD < 20 then punishPlayer(best) end
+					end
+					findPlayerInHitbox()
+				end
+			end
+			return old(prompt, ...)
+		end))
+	end
+end)
+
+-- Find Plot
+task.spawn(function()
+	while task.wait(0.5) do
+		local plots = Workspace:FindFirstChild("Plots")
+		if plots and not core.MyPlot then
+			for _, p in ipairs(plots:GetChildren()) do
+				local sign = p:FindFirstChild("PlotSign")
+				if sign then
+					local lbl = sign:FindFirstChild("TextLabel", true)
+					if lbl then
+						local t = lbl.Text:lower()
+						if t:find(plr.Name:lower()) or t:find(plr.DisplayName:lower()) then
+							core.MyPlot = p
+							core.StealHitbox = p:FindFirstChild("StealHitbox", true)
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Main Protection Loop
+RunService.Heartbeat:Connect(function()
+	-- Border Kick
+	if core.BorderKick and core.StealHitbox and core.AdminRemote then
+		local cf, size = core.StealHitbox.CFrame, core.StealHitbox.Size
+		local hx, hz = size.X * 0.5, size.Z * 0.5
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= plr then
+				local char = p.Character
+				if char then
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						local rel = cf:PointToObjectSpace(hrp.Position)
+						if math.abs(rel.X) <= hx and math.abs(rel.Z) <= hz then
+							for _, item in ipairs(char:GetChildren()) do
+								if CARPET_ITEMS[item.Name] then
+									local uid = p.UserId
+									if not core.CarpetSpammedPlayers[uid] then
+										core.CarpetSpammedPlayers[uid] = true
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "balloon")
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "jumpscare")
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "rocket")
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "jail")
+										task.delay(5, function() core.CarpetSpammedPlayers[uid] = nil end)
+									end
+									break
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- TP Protector
+	if core.TpProtector and core.AdminRemote then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= plr then
+				local char = p.Character
+				if char then
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						local cur = hrp.Position
+						local uid = p.UserId
+						local last = core.PlayerPositions[uid]
+						if last and (cur - last).Magnitude > 7 then
+							for _, item in ipairs(char:GetChildren()) do
+								if CARPET_ITEMS[item.Name] then
+									if not core.TpProtectorCooldowns[uid] or tick() - core.TpProtectorCooldowns[uid] > 3 then
+										core.TpProtectorCooldowns[uid] = tick()
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "balloon")
+										fireAdmin("f888ee6e-c86d-46e1-93d7-0639d6635d42", p, "jail")
+									end
+									break
+								end
+							end
+						end
+						core.PlayerPositions[uid] = cur
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- GUI
+local sg = Instance.new("ScreenGui")
+sg.Parent = gui
+sg.ResetOnSpawn = false
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 240, 0, 260)
+main.Position = UDim2.new(0.5, -120, 0.5, -130)
+main.BackgroundColor3 = Color3.fromRGB(20,25,35)
+main.BackgroundTransparency = 0.35
+main.Parent = sg
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,16)
+
+-- Gradient BG
+local gradientBG = Instance.new("UIGradient")
+gradientBG.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(30,40,60)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(10,15,25))
+}
+gradientBG.Transparency = NumberSequence.new{
+	NumberSequenceKeypoint.new(0,0.3),
+	NumberSequenceKeypoint.new(1,0.6)
+}
+gradientBG.Rotation = 90
+gradientBG.Parent = main
+
+-- Glow Border
+local glow = Instance.new("UIStroke")
+glow.Color = Color3.fromRGB(0,170,255)
+glow.Thickness = 7
+glow.Transparency = 0.6
+glow.Parent = main
+
+TweenService:Create(glow, TweenInfo.new(2,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut,-1,true), {
+	Transparency = 0.85,
+	Thickness = 9
+}):Play()
+
+-- TITLE (ANIMATED BACK)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,40)
+title.BackgroundTransparency = 1
+title.Text = "Auto Defense - Tokoo Hub"
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Parent = main
+
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0,170,255)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255,255,255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0,170,255))
+}
+gradient.Parent = title
+
+task.spawn(function()
+	while true do
+		gradient.Offset = Vector2.new(-1,0)
+		TweenService:Create(gradient, TweenInfo.new(3), {
+			Offset = Vector2.new(1,0)
+		}):Play()
+		task.wait(3)
+	end
+end)
+
+-- FPS + PING
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1,0,0,20)
+info.Position = UDim2.new(0,0,0,38)
+info.BackgroundTransparency = 1
+info.Text = "FPS: 0 | Ping: 0"
+info.Font = Enum.Font.GothamBold
+info.TextSize = 13
+info.Parent = main
+
+-- UPDATE FPS + PING WITH COLORS
+local last = tick()
+
+RunService.RenderStepped:Connect(function()
+	local fps = math.floor(1 / (tick() - last))
+	last = tick()
+
+	local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+
+	-- FPS Color
+	local fpsColor = Color3.fromRGB(0,255,0)
+	if fps < 40 then
+		fpsColor = Color3.fromRGB(255,0,0)
+	elseif fps < 60 then
+		fpsColor = Color3.fromRGB(255,170,0)
+	end
+
+	-- Ping Color
+	local pingColor = Color3.fromRGB(0,255,0)
+	if ping > 150 then
+		pingColor = Color3.fromRGB(255,0,0)
+	elseif ping > 80 then
+		pingColor = Color3.fromRGB(255,170,0)
+	end
+
+	info.Text = "FPS: "..fps.." | Ping: "..ping
+	info.TextColor3 = fpsColor:Lerp(pingColor, 0.5)
+end)
+
+-- Minimize Button
+local minimize = Instance.new("TextButton")
+minimize.Size = UDim2.new(0,22,0,22)
+minimize.Position = UDim2.new(1,-26,0,8)
+minimize.BackgroundColor3 = Color3.fromRGB(30,30,40)
+minimize.Text = "-"
+minimize.TextColor3 = Color3.fromRGB(255,255,255)
+minimize.Font = Enum.Font.GothamBold
+minimize.TextSize = 14
+minimize.Parent = main
+Instance.new("UICorner", minimize).CornerRadius = UDim.new(1,0)
+
+-- Toggles
+local toggles = {}
+local toggleStates = {}
+
+local function createToggle(text, yPos, callback)
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(0.9,0,0,34)
+	bg.Position = UDim2.new(0.05,0,0,yPos)
+	bg.BackgroundColor3 = Color3.fromRGB(25,30,40)
+	bg.BackgroundTransparency = 0.25
+	bg.Parent = main
+	Instance.new("UICorner", bg).CornerRadius = UDim.new(0,10)
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(0.6,0,1,0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = Color3.fromRGB(220,220,255)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 14
+	lbl.TextStrokeTransparency = 0.6
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Parent = bg
+
+	local btn = Instance.new("Frame")
+	btn.Size = UDim2.new(0,40,0,20)
+	btn.Position = UDim2.new(1,-48,0.5,-10)
+	btn.BackgroundColor3 = Color3.fromRGB(50,50,60)
+	btn.Parent = bg
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(1,0)
+
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.new(0,18,0,18)
+	dot.Position = UDim2.new(0,1,0,1)
+	dot.BackgroundColor3 = Color3.fromRGB(120,120,140)
+	dot.Parent = btn
+	Instance.new("UICorner", dot).CornerRadius = UDim.new(1,0)
+
+	local state = false
+	toggleStates[text] = false
+
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 
+		or input.UserInputType == Enum.UserInputType.Touch then
+			
+			state = not state
+			toggleStates[text] = state
+
+			if state then
+				dot:TweenPosition(UDim2.new(1,-19,0,1),"Out","Quad",0.2,true)
+				dot.BackgroundColor3 = Color3.fromRGB(0,170,255)
+			else
+				dot:TweenPosition(UDim2.new(0,1,0,1),"Out","Quad",0.2,true)
+				dot.BackgroundColor3 = Color3.fromRGB(120,120,140)
+			end
+
+			if callback then
+				callback(state)
+			end
+		end
+	end)
+
+	table.insert(toggles, bg)
+end
+
+createToggle("Auto Defense", 70, function(state)
+	if state then
+		core.Mode = "NoKick"
+		-- Turn off Auto Defense (Kick) if it's on
+		if toggleStates["Auto Defense (Kick)"] then
+			-- We'll handle this with the toggle update
+		end
+	else
+		if core.Mode == "NoKick" then
+			core.Mode = "None"
+		end
+	end
+end)
+
+createToggle("Auto Defense (Kick)", 105, function(state)
+	if state then
+		core.Mode = "Kick"
+		-- Turn off Auto Defense if it's on
+		if toggleStates["Auto Defense"] then
+			-- We'll handle this with the toggle update
+		end
+	else
+		if core.Mode == "Kick" then
+			core.Mode = "None"
+		end
+	end
+end)
+
+createToggle("Anti TP Scam", 140, function(state)
+	core.BorderKick = state
+end)
+
+createToggle("Anti Intruder", 175, function(state)
+	core.TpProtector = state
+end)
+
+-- Minimize Logic (FPS + Ping stay visible)
+local minimized = false
+local originalSize = main.Size
+
+minimize.MouseButton1Click:Connect(function()
+	minimized = not minimized
+
+	if minimized then
+		TweenService:Create(main, TweenInfo.new(0.25), {
+			Size = UDim2.new(0, 240, 0, 65)
+		}):Play()
+
+		for _,v in pairs(toggles) do
+			v.Visible = false
+		end
+
+		minimize.Text = "+"
+	else
+		TweenService:Create(main, TweenInfo.new(0.25), {
+			Size = originalSize
+		}):Play()
+
+		for _,v in pairs(toggles) do
+			v.Visible = true
+		end
+
+		minimize.Text = "-"
+	end
+end)
+
+-- Drag
+local dragging = false
+local dragInput, dragStart, startPos
+
+local function update(input)
+	local delta = input.Position - dragStart
+	main.Position = UDim2.new(
+		startPos.X.Scale,
+		startPos.X.Offset + delta.X,
+		startPos.Y.Scale,
+		startPos.Y.Offset + delta.Y
+	)
+end
+
+main.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+	or input.UserInputType == Enum.UserInputType.Touch then
+		
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+main.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement 
+	or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		update(input)
+	end
+end)
