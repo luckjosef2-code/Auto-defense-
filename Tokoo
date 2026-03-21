@@ -9,12 +9,12 @@ print("Dein Username:", playerName)
 -- ✅ WHITELIST
 local whitelist = {
     "waffel_dob6", -- DEIN USERNAME
-    "Friend1"
+    ""
 }
 
 -- ❌ BLACKLIST
 local blacklist = {
-    "BadUser1"
+    ""
 }
 
 -- ❌ BLACKLIST CHECK (immer zuerst)
